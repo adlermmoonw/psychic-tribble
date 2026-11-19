@@ -40,11 +40,11 @@ on:
       warp_nodes:
         description: "WARP edge colo 池（同区低延迟、每台不同 colo → 不同出口 IP）；非空时优先于国家"
         required: false
-        default: "LAX,SJC,SEA,DFW,ORD,IAD,ATL,MIA,EWR,BOS,DEN,PHX,YYZ,YVR,YUL"
+        default: ""
       warp_countries:
         description: "WARP 出口国家池（按 runner 轮流分配，避免多台撞同一出口 IP）"
         required: false
-        default: "US,CA,GB,DE,FR,NL,JP,KR,SG,AU,IN,BR,IT,ES,SE,PL,CH,AT,BE,IE,NO,DK,FI,CZ,PT,GR,RO,HU,BG,SK,SI,HR,RS,LT,LV,EE,UA,TR,IL,AE,SA,ZA,EG,MA,NG,KE,MX,AR,CL,CO,PE,NZ,TW,HK,MY,TH,VN,PH,ID,PK,BD,LK,NP,KH,MM,BN,MN,KZ,UZ,KG,GE,AM,AZ,BY,MD,AL,MK,BA,ME,MT,CY,LU,IS,PR,DO,CR,PA,GT,EC,UY,PY,BO,VE,FJ,GU,QA,KW,BH,OM,JO,LB,IQ,TN,DZ,LY,SN,CI,CM,AO,MZ,ZM,ZW,BW,NA,MU,MG,TZ,UG,RW"
+        default: ""
       rest_every:
         description: "每注册 N 个账号休息一次（0=不休息）"
         required: false
@@ -115,30 +115,24 @@ jobs:
           path: xehn-cache
           key: xehn-cache-v1
 
-      - name: 建立出口（xehn WARP）并注册
+      - name: 建立出口并注册（脚本在私有仓库，逻辑改动无需改这里）
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUNNER_INDEX: ${{ matrix.run }}
+          WARP_NODES: ${{ inputs.warp_nodes }}
+          WARP_COUNTRIES: ${{ inputs.warp_countries }}
           WORKERS: ${{ inputs.workers }}
           ACCOUNTS: ${{ inputs.accounts }}
           MAIL_API_URL: ${{ vars.MAIL_API_URL || 'https://mail.minecraft.fashion' }}
           MAIL_DOMAINS: ${{ inputs.domain }}
           ENABLE_UPLOAD: ${{ inputs.upload }}
+          EGRESS_ROTATOR: "warp"
+          EGRESS_ROTATE_AFTER: "3"
           REST_EVERY: ${{ inputs.rest_every }}
           REST_SEC: ${{ inputs.rest_sec }}
         run: |
-          $nodes = @("${{ inputs.warp_nodes }}" -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-          $countries = @("${{ inputs.warp_countries }}" -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-          $idx = [int]"${{ matrix.run }}"
-          $node = ""; $country = ""
-          if ($nodes.Count -gt 0) { $node = $nodes[$idx % $nodes.Count] }
-          elseif ($countries.Count -gt 0) { $country = $countries[$idx % $countries.Count] }
-          Write-Host "warp target for this runner: node=$node country=$country"
-          ./scripts/setup_egress.ps1 -Core "${{ inputs.warp_core }}" -Port 7890 -Country $country -Node $node
-          if (-not $env:PROXY_SERVER) { Write-Host "::error::WARP egress not ready"; exit 1 }
-          # 预热 ruyijs 引擎（Windows 冷启动几个 abort，预热后正常）
-          python warmup.py
-          python run_ruyi.py
+          ./scripts/run_all.ps1 -Core "${{ inputs.warp_core }}" -Port 7890
 
       - name: 加密账号目录
         if: always()
