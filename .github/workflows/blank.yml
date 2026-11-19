@@ -37,6 +37,10 @@ on:
         description: "WARP 协议: awg / wg / masque / masque-h2"
         required: false
         default: "awg"
+      warp_nodes:
+        description: "WARP edge colo 池（同区低延迟、每台不同 colo → 不同出口 IP）；非空时优先于国家"
+        required: false
+        default: "LAX,SJC,SEA,DFW,ORD,IAD,ATL,MIA,EWR,BOS,DEN,PHX,YYZ,YVR,YUL"
       warp_countries:
         description: "WARP 出口国家池（按 runner 轮流分配，避免多台撞同一出口 IP）"
         required: false
@@ -123,12 +127,14 @@ jobs:
           REST_EVERY: ${{ inputs.rest_every }}
           REST_SEC: ${{ inputs.rest_sec }}
         run: |
+          $nodes = @("${{ inputs.warp_nodes }}" -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
           $countries = @("${{ inputs.warp_countries }}" -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
           $idx = [int]"${{ matrix.run }}"
-          $pick = ""
-          if ($countries.Count -gt 0) { $pick = $countries[$idx % $countries.Count] }
-          Write-Host "warp country for this runner: $pick"
-          ./scripts/setup_egress.ps1 -Core "${{ inputs.warp_core }}" -Port 7890 -Country $pick
+          $node = ""; $country = ""
+          if ($nodes.Count -gt 0) { $node = $nodes[$idx % $nodes.Count] }
+          elseif ($countries.Count -gt 0) { $country = $countries[$idx % $countries.Count] }
+          Write-Host "warp target for this runner: node=$node country=$country"
+          ./scripts/setup_egress.ps1 -Core "${{ inputs.warp_core }}" -Port 7890 -Country $country -Node $node
           if (-not $env:PROXY_SERVER) { Write-Host "::error::WARP egress not ready"; exit 1 }
           # 预热 ruyijs 引擎（Windows 冷启动几个 abort，预热后正常）
           python warmup.py
