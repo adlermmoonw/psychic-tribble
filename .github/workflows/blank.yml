@@ -1,28 +1,34 @@
-name: twreg-public
+name: twreg-public-ur
 
-# 放在【公开仓库】里跑的入口：用 secrets.gh_token 拉取私有仓库代码，然后执行注册。
+# 放在【公开仓库】里跑的入口 —— URnetwork(ur.io) 出口版（feat/urnetwork-egress 分支）
+#
+# 流程：
+#   1) build    : ubuntu 上交叉编译 ur-socks.exe（urnetwork/{connect,glog,userwireguard,gvisor,proxy}）
+#   2) reg      : windows runner 上起 N 条用户态 SOCKS5 出口（每线程一条，自动开 UR 即时账号），
+#                 再跑 ruyijs 注册
 #
 # 公开仓库的日志与 artifact 是公开的，所以这里：
 #   * LOG_MASK=1        —— 日志里的用户名打码
 #   * accounts 目录加密  —— 用 secrets.artifact_pass 加密后才上传（未配置则完全不上传）
 #
 # 需要在公开仓库配置的 secrets：
-#   gh_token       必填，能读私有仓库的 PAT（classic: repo；fine-grained: Contents=Read）
+#   PRIVATE_REPO_ACCESS_KEY 必填，能读私有仓库的 PAT（fine-grained: Contents=Read，放在 Variables）
 #   artifact_pass  选填，加密 accounts 的密码（强烈建议配置）
-#   UR_CREDENTIALS 选填，仅当 egress=ur 时需要
+#   UR_CREDENTIALS 选填，手工 UR 账号（每行/逗号分隔 jwt:<jwt> 或 <user>:<pass>）；
+#                  留空时脚本会用 UR_AUTO_ACCOUNTS=1 自动开 guest 账号
 #
-# 需要按需修改的变量（本文件顶部）：
-#   PRIVATE_REPO   私有仓库，形如 xbox-cn/twreg_ruyijs
-#   PRIVATE_REF    拉取的分支/标签
+# 拉取的私有仓库与分支（按需修改）：
+#   PRIVATE_REPO   xbox-cn/twreg_ruyijs
+#   PRIVATE_REF    feat/urnetwork-egress
 on:
   workflow_dispatch:
     inputs:
       runners:
-        description: "并行 runner 数（每台 1 条 WARP 出口）"
+        description: "job 数量（每个 job 默认注册 45 个账号，推荐 256）"
         required: false
         default: "1"
       workers:
-        description: "线程数"
+        description: "线程数（= 每台的 UR 出口数）"
         required: false
         default: "3"
       accounts:
@@ -33,18 +39,10 @@ on:
         description: "收信域名（*.xxx 表示每次随机子域）"
         required: false
         default: "*.jsip.us"
-      warp_core:
-        description: "WARP 协议: awg / wg / masque / masque-h2"
+      ur_locations:
+        description: "UR 出口地区池（逗号分隔，按轮换使用）"
         required: false
-        default: "awg"
-      warp_nodes:
-        description: "WARP edge colo 池（同区低延迟、每台不同 colo → 不同出口 IP）；非空时优先于国家"
-        required: false
-        default: ""
-      warp_countries:
-        description: "WARP 出口国家池（按 runner 轮流分配，避免多台撞同一出口 IP）"
-        required: false
-        default: ""
+        default: "United States,Germany,United Kingdom,Canada,France,Netherlands,Japan,Singapore"
       rest_every:
         description: "每注册 N 个账号休息一次（0=不休息）"
         required: false
@@ -53,16 +51,55 @@ on:
         description: "每次休息秒数"
         required: false
         default: "600"
+      probe_only:
+        description: "只建立出口 + 真实 Step1 探活，不注册"
+        required: false
+        default: "0"
       upload:
         description: "上传账号到服务器: 1=上传 0=只加密上传 artifact"
         required: false
         default: "0"
 
 concurrency:
-  group: twreg-public-${{ github.ref }}
+  group: twreg-public-ur-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: 检出私有仓库代码
+        uses: actions/checkout@v4
+        with:
+          repository: xbox-cn/twreg_ruyijs
+          ref: feat/urnetwork-egress
+          token: ${{ vars.PRIVATE_REPO_ACCESS_KEY }}
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          check-latest: true
+
+      - name: 缓存 UR 源码
+        uses: actions/cache@v4
+        with:
+          path: ur-build
+          key: ur-build-${{ runner.os }}-v1
+
+      - name: 构建 ur-socks (windows/amd64)
+        run: |
+          chmod +x scripts/ur_socks.sh
+          BUILD_DIR="$PWD/ur-build" BIN="$PWD/ur-socks.exe" GOOS=windows GOARCH=amd64 ./scripts/ur_socks.sh build
+
+      - name: 上传 ur-socks
+        uses: actions/upload-artifact@v4
+        with:
+          name: ur-socks
+          path: ur-socks.exe
+          retention-days: 3
+
   prepare:
     runs-on: ubuntu-latest
     outputs:
@@ -72,11 +109,11 @@ jobs:
         env:
           N: ${{ inputs.runners }}
         run: |
-          M=$(python3 -c "import json,os;n=max(1,min(50,int(os.environ.get('N') or 1)));print(json.dumps(list(range(n))))")
+          M=$(python3 -c "import json,os;n=max(1,min(256,int(os.environ.get('N') or 1)));print(json.dumps(list(range(n))))")
           echo "matrix=$M" >> "$GITHUB_OUTPUT"
 
   reg:
-    needs: prepare
+    needs: [build, prepare]
     runs-on: windows-latest
     timeout-minutes: 350
     strategy:
@@ -92,9 +129,9 @@ jobs:
       - name: 检出私有仓库代码
         uses: actions/checkout@v4
         with:
-          repository: xbox-cn/twreg_ruyijs   # ← 改成你的私有仓库
-          ref: feat/urnetwork-egress                          # ← 改成要拉的分支
-          token: ${{ secrets.gh_token }}
+          repository: xbox-cn/twreg_ruyijs
+          ref: feat/urnetwork-egress
+          token: ${{ vars.PRIVATE_REPO_ACCESS_KEY }}
 
       - name: 安装 Python
         uses: actions/setup-python@v5
@@ -106,33 +143,53 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          python -m pip install "ruyijs==0.2.0"
+          # 0.4.x 才支持 socks5h://（0.2.0 在 Windows 上会 NetworkError）
+          python -m pip install "ruyijs>=0.4.1"
           python -c "import ruyijs; print('ruyijs', ruyijs.__version__)"
 
-      - name: 缓存 xehn 包
-        uses: actions/cache@v4
+      - name: 下载 ur-socks
+        uses: actions/download-artifact@v4
         with:
-          path: xehn-cache
-          key: xehn-cache-v1
+          name: ur-socks
+          path: .
 
-      - name: 建立出口并注册（脚本在私有仓库，逻辑改动无需改这里）
-        shell: pwsh
+      - name: 启动 UR 出口（每个 worker 一条）
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUNNER_INDEX: ${{ matrix.run }}
-          WARP_NODES: ${{ inputs.warp_nodes }}
-          WARP_COUNTRIES: ${{ inputs.warp_countries }}
+          BIN: ./ur-socks.exe
+          UR_INSTANCES: ${{ inputs.workers }}
+          UR_LOCATIONS: ${{ inputs.ur_locations }}
+          UR_BASE_PORT: "9001"
+          UR_AUTO_ACCOUNTS: "1"
+          UR_PROBE: "1"
+          UR_PROBE_RETRIES: "6"
+          UR_CREDENTIALS: ${{ secrets.UR_CREDENTIALS }}
+          UR_USER_AUTH: ${{ secrets.UR_USER_AUTH }}
+          UR_PASSWORD: ${{ secrets.UR_PASSWORD }}
+          UR_JWT: ${{ secrets.UR_JWT }}
+        run: |
+          chmod +x ur-socks.exe scripts/ur_socks.sh 2>/dev/null || true
+          ./scripts/ur_socks.sh start
+          echo "EGRESS_LIST=$EGRESS_LIST"
+
+      - name: 注册
+        if: ${{ inputs.probe_only != '1' }}
+        env:
           WORKERS: ${{ inputs.workers }}
           ACCOUNTS: ${{ inputs.accounts }}
           MAIL_API_URL: ${{ vars.MAIL_API_URL || 'https://mail.minecraft.fashion' }}
           MAIL_DOMAINS: ${{ inputs.domain }}
           ENABLE_UPLOAD: ${{ inputs.upload }}
-          EGRESS_ROTATOR: "warp"
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'http://192.255.172.250:5000' }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+          # 连续 3 次被拒（5025/2014/网络错误）→ 自动换出口 IP
           EGRESS_ROTATE_AFTER: "3"
+          EGRESS_ROTATOR: "ur_socks"
           REST_EVERY: ${{ inputs.rest_every }}
           REST_SEC: ${{ inputs.rest_sec }}
         run: |
-          ./scripts/run_all.ps1 -Core "${{ inputs.warp_core }}" -Port 7890
+          python warmup.py
+          python run_ruyi.py
 
       - name: 加密账号目录
         if: always()
@@ -157,9 +214,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: accounts-run${{ matrix.run }}-${{ github.run_id }}
+          name: ur-accounts-run${{ matrix.run }}-${{ github.run_id }}
           path: |
             accounts.tar.gz.enc
             logs/
+            ur-socks-*.log
+            ur_accounts.jsonl
           retention-days: 14
           if-no-files-found: warn
