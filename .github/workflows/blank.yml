@@ -75,7 +75,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          python -m pip install "ruyijs==0.2.0"
+          python -m pip install "ruyijs>=0.4.1"
           python -c "import ruyijs; print('ruyijs', ruyijs.__version__)"
 
       - name: 安装 OpenVPN（VPNGate）
