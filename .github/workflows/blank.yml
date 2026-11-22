@@ -100,25 +100,28 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ALLINONE: "1"
           ALLINONE_ORDER: "vpngate,ur,warp,direct"
+          EGRESS_ROTATE_AFTER: "2"
           PROXY_SERVER: direct
           VPNGATE_ENABLED: "1"
           VPNGATE_OPENVPN: 'C:/Program Files/OpenVPN/bin/openvpn.exe'
           VPNGATE_NODES: "100"
-          VPNGATE_ATTEMPTS: "12"
-          VPNGATE_TIMEOUT: "45"
-          VPNGATE_MIN_NODES: "10"
-          VPNGATE_FETCH_ROUNDS: "4"
-          VPNGATE_MIN_VALID: "5"
-          VPNGATE_VALIDATE_MAX: "12"
-          VPNGATE_POOL_ROUNDS: "4"
-          VPNGATE_REFRESH_ROUNDS: "2"
+          VPNGATE_ATTEMPTS: "2"
+          VPNGATE_ROTATE_ATTEMPTS: "2"
+          VPNGATE_TIMEOUT: "25"
+          VPNGATE_MIN_NODES: "5"
+          VPNGATE_FETCH_ROUNDS: "2"
+          VPNGATE_MIN_VALID: "2"
+          VPNGATE_VALIDATE_MAX: "3"
+          VPNGATE_POOL_ROUNDS: "2"
+          VPNGATE_REFRESH_ROUNDS: "1"
           UR_INSTANCES: "1"
           UR_AUTO_ACCOUNTS: "1"
           UR_PROBE: "1"
-          UR_PROBE_RETRIES: "6"
+          UR_PROBE_RETRIES: "2"
           UR_BASE_PORT: "9001"
           WARP_CORE: "awg"
           WARP_PORT: "7890"
+          WARP_READY_TIMEOUT: "30"
           WORKERS: ${{ inputs.workers }}
           ACCOUNTS: ${{ inputs.accounts }}
           MAIL_API_URL: ${{ vars.MAIL_API_URL || 'https://mail.minecraft.fashion' }}
