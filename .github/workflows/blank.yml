@@ -74,7 +74,7 @@ jobs:
         with:
           repository: xbox-cn/twreg_ruyijs
           ref: feat/urnetwork-egress
-          token: ${{ vars.PRIVATE_REPO_ACCESS_KEY }}
+          token: ${{ secrets.PRIVATE_REPO_ACCESS_KEY || vars.PRIVATE_REPO_ACCESS_KEY }}
 
       - name: 安装 Go
         uses: actions/setup-go@v5
@@ -131,7 +131,7 @@ jobs:
         with:
           repository: xbox-cn/twreg_ruyijs
           ref: feat/urnetwork-egress
-          token: ${{ vars.PRIVATE_REPO_ACCESS_KEY }}
+          token: ${{ secrets.PRIVATE_REPO_ACCESS_KEY || vars.PRIVATE_REPO_ACCESS_KEY }}
 
       - name: 安装 Python
         uses: actions/setup-python@v5
@@ -180,8 +180,8 @@ jobs:
           MAIL_API_URL: ${{ vars.MAIL_API_URL || 'https://mail.minecraft.fashion' }}
           MAIL_DOMAINS: ${{ inputs.domain }}
           ENABLE_UPLOAD: ${{ inputs.upload }}
-          API_BASE_URL: ${{ vars.API_BASE_URL || 'http://192.255.172.250:5000' }}
-          API_TOKEN: ${{ secrets.API_TOKEN }}
+          API_BASE_URL: ${{ vars.API_BASE_URL || secrets.API_BASE_URL || 'http://192.255.172.250:5000' }}
+          API_TOKEN: ${{ secrets.API_TOKEN || vars.API_TOKEN }}
           # 连续 3 次被拒（5025/2014/网络错误）→ 自动换出口 IP
           EGRESS_ROTATE_AFTER: "3"
           EGRESS_ROTATOR: "ur_socks"
