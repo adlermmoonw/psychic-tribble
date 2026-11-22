@@ -93,7 +93,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: xbox-cn/twreg_ruyijs   # ← 改成你的私有仓库
-          ref: main                          # ← 改成要拉的分支
+          ref: feat/urnetwork-egress                          # ← 改成要拉的分支
           token: ${{ secrets.gh_token }}
 
       - name: 安装 Python
