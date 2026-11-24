@@ -5,7 +5,7 @@ name: twreg-public-tanuki
 #
 # Public-repo Variables/Secrets:
 #   Variables: PRIVATE_REPO_ACCESS_KEY (read xbox-cn/twreg_ruyijs), API_BASE_URL (optional)
-#   Secrets  : TANUKI_TOKEN (read xbox-cn/tanuki), API_TOKEN (optional), artifact_pass (recommended)
+#   Secrets  : API_TOKEN (optional), artifact_pass (recommended)
 on:
   workflow_dispatch:
     inputs:
@@ -73,13 +73,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: download tanuki runtime
+      - name: download tanuki runtime (bundled in private repo)
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.TANUKI_TOKEN || secrets.PRIVATE_REPO_ACCESS_KEY || vars.PRIVATE_REPO_ACCESS_KEY }}
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_ACCESS_KEY || vars.PRIVATE_REPO_ACCESS_KEY }}
         run: |
-          if (-not $env:GH_TOKEN) { Write-Host "::error::TANUKI_TOKEN (or PRIVATE_REPO_ACCESS_KEY with tanuki access) is required"; exit 1 }
-          gh release download "v0.3.0" -R xbox-cn/tanuki -p tanuki-win64.7z -O tanuki-win64.7z --clobber
+          gh release download tanuki-runtime -R xbox-cn/twreg_ruyijs -p tanuki-win64.7z -O tanuki-win64.7z --clobber
           $dst = Join-Path $env:RUNNER_TEMP "tanuki"
           New-Item -ItemType Directory -Force -Path $dst | Out-Null
           $seven = "C:\Program Files\7-Zip\7z.exe"
