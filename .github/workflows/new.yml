@@ -72,6 +72,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
+          python -m pip install "ruyijs>=0.4.1"
 
       - name: download tanuki runtime (bundled in private repo)
         shell: pwsh
@@ -112,6 +113,7 @@ jobs:
           WORKERS: ${{ inputs.workers }}
           ACCOUNTS: ${{ inputs.accounts }}
           ENABLE_UPLOAD: ${{ inputs.upload }}
+          TANUKI_SESSION_ACCOUNTS: ${{ vars.TANUKI_SESSION_ACCOUNTS || '10' }}
           MAIL_API_URL: ${{ vars.MAIL_API_URL || 'https://mail.minecraft.fashion' }}
           MAIL_DOMAINS: "*.jsip.us"
           API_BASE_URL: ${{ vars.API_BASE_URL || secrets.API_BASE_URL || 'http://192.255.172.250:5000' }}
@@ -120,6 +122,7 @@ jobs:
           VPNGATE_TIMEOUT: "25"
           EGRESS_ROTATE_AFTER: "2"
         run: |
+          try { tzutil /s "China Standard Time" } catch { Write-Host "tzutil failed: $_" }
           python run_tanuki.py
 
       - name: disconnect VPNGate
