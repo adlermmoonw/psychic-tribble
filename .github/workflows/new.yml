@@ -116,7 +116,7 @@ jobs:
           ENABLE_UPLOAD: ${{ inputs.upload }}
           TANUKI_SESSION_ACCOUNTS: ${{ vars.TANUKI_SESSION_ACCOUNTS || '10' }}
           VPNGATE_ENABLED: ${{ vars.VPNGATE_ENABLED || '0' }}
-          UR_LOCATIONS: ${{ vars.UR_LOCATIONS }}
+          UR_LOCATIONS: ${{ vars.UR_LOCATIONS || 'United States,Germany,United Kingdom,Canada,France,Netherlands,Japan,Singapore' }}
           EGRESS_LIST_API_URL: ${{ vars.EGRESS_LIST_API_URL || 'http://194.36.85.43:8787' }}
           EGRESS_LIST_API_TOKEN: ${{ secrets.EGRESS_LIST_API_TOKEN || vars.EGRESS_LIST_API_TOKEN }}
           MAIL_API_URL: ${{ vars.MAIL_API_URL || 'https://mail.minecraft.fashion' }}
